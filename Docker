@@ -1,0 +1,29 @@
+# Використання офіційного образу Nginx як багатоступеневої бази
+FROM nginx:stable-alpine as base
+
+# Встановлення сертифікатів для HTTPS
+RUN apk --no-cache add openssl \
+    && mkdir /etc/nginx/ssl \
+    && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/nginx.key -out /etc/nginx/ssl/nginx.crt -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=www.example.com"
+
+# Копіювання індивідуальної конфігурації Nginx для оптимізації продуктивності
+COPY ./nginx.conf /etc/nginx/nginx.conf
+
+# Копіюємо файл index.html з локальної директорії до директорії сервера
+COPY ./index.html /usr/share/nginx/html/index.html
+
+# Встановлення мінімальних прав доступу
+RUN chown -R nginx:nginx /usr/share/nginx/html \
+    && chmod -R 755 /usr/share/nginx/html \
+    && chown -R nginx:nginx /etc/nginx/ssl \
+    && chmod -R 600 /etc/nginx/ssl/nginx.*
+
+# Використання невисокопривілейованого користувача
+USER nginx
+
+# Відкриваємо порт 80 та 443 для зовнішнього світу
+EXPOSE 80 443
+
+# Команда запуску за замовчуванням використовується з базового образу Nginx
+CMD ["nginx", "-g", "daemon off;"]
+
