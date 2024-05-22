@@ -1,0 +1,76 @@
+nadzhenda, [19 трав. 2024 р., 23:01:30]:
+...- name: Update and secure web hosting environments
+  hosts: all
+  become: true
+
+  tasks:
+  
+  # Оновлення системних пакетів за допомогою apt для систем, що базуються на Debian
+  - name: Perform a full system upgrade on Debian-like hosts
+    apt:
+      pkg: nginx
+      state: latest
+      cache_valid_time: 3600
+    when: ansible_facts['os_family'] == 'Debian'
+
+  # Налаштування правил UFW на Debian системах для доступу через веб і SSH
+  - name: Adjust firewall settings for web and SSH access
+    community.general.ufw:
+      rule: "allow"
+      port: "{{ port_number }}"
+      proto: tcp
+    loop:
+      - "22"  
+      - "80"  
+    when: ansible_facts['os_family'] == 'Debian'
+
+  # Активація UFW з високим рівнем логування
+  - name: Enable firewall with strict policies
+    community.general.ufw:
+      state: enabled
+      default: "reject"
+      logging: "high"
+    when: ansible_facts['os_family'] == 'Debian'
+
+# Переконатися, що на системах, які базуються на Red Hat, встановлені останні версії пакетів
+  - name: Update packages to the latest versions on Red Hat-like systems
+    yum:
+      name: httpd
+      state: latest
+      enable_repo: 'epel'
+    when: ansible_facts['os_family'] == 'RedHat'
+
+  # Запуск та включення сервісу Apache на системах, які використовують yum
+  - name: Manage the Apache web server state
+    service:
+      name: httpd
+      state: running
+      enabled: true
+    when: ansible_facts['os_family'] == 'RedHat'
+
+  # Оновлення net-tools до останньої версії на системах, які базуються на Red Hat
+  - name: Ensure net-tools are up-to-date on Red Hat-like systems
+    yum:
+      name: net-tools
+      state: latest
+    when: ansible_facts['os_family'] == 'RedHat'
+
+  # Налаштування Firewalld для прийому SSH та HTTP трафіку на системах, які базуються на Red Hat
+  - name: Configure ports on Firewalld
+    firewalld:
+      port: "{{ port_number }}/tcp"
+      state: enabled
+      permanent: true
+      immediate: true
+    loop:
+      - "22" 
+      - "80"  
+    when: ansible_facts['os_family'] == 'RedHat'
+
+  # Переконатися, що в директорії веб-сервера є остання версія домашньої сторінки
+  - name: Update homepage in the web directory
+    ansible.builtin.copy:
+      src: ./new_index.html
+      dest: /var/www/html/index.html
+
+...
