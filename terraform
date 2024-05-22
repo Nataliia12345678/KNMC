@@ -1,0 +1,103 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = ">= 3.0.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  region = "eastus2"
+}
+
+data "azurerm_image" "optimized_linux" {
+  name                = "ubuntu-custom"
+  resource_group_name = "rg-ubuntuimages"
+}
+
+resource "azurerm_ssh_public_key" "web_key_pair" {
+  name                = "web-server-key"
+  resource_group_name = "rg-webapp"
+  public_key          = file("path/to/your/public_key.pub")
+}
+
+resource "azurerm_virtual_network" "web_vnet" {
+  name                = "vnet-webapp"
+  address_space       = ["10.1.0.0/16"]
+  location            = "eastus2"
+  resource_group_name = "rg-webapp"
+}
+
+resource "azurerm_network_security_group" "web_access" {
+  name                = "nsg-webapp"
+  location            = "eastus2"
+  resource_group_name = "rg-webapp"
+
+  security_rule {
+    name                       = "SSH"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  security_rule {
+    name                       = "AllowAllOutbound"
+    priority                   = 200
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_subnet" "web_subnet" {
+  name                 = "subnet-webapp"
+  resource_group_name  = "rg-webapp"
+  virtual_network_name = "vnet-webapp"
+  address_prefixes     = ["10.1.1.0/24"]
+}
+
+resource "azurerm_network_interface" "web_nic" {
+  name                = "nic-webapp"
+  location            = "eastus2"
+  resource_group_name = "rg-webapp"
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.web_subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "web_server" {
+  name                  = "vm-webapp"
+  resource_group_name   = "rg-webapp"
+  location              = "eastus2"
+  size                  = "Standard_B1s"
+  admin_username        = "adminuser"
+  network_interface_ids = [azurerm_network_interface.web_nic.id]
+  ssh_key {
+    username   = "adminuser"
+    public_key = azurerm_ssh_public_key.web_key_pair.public_key
+  }
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+  source_image_id = data.azurerm_image.optimized_linux.id
+  custom_data     = file("bootstrap.sh")
+}
+
+output "web_server_public_ip" {
+  value = azurerm_linux_virtual_machine.web_server.public_ip_address
+}
